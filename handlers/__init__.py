@@ -1,6 +1,6 @@
 from aiogram import Router
 
-from . import youtube, start, tiktok, instagram
+from . import youtube, start, tiktok, instagram, inline
 
 router = Router(name=__name__)
 
@@ -9,6 +9,7 @@ router.include_routers(
     youtube.router,
     tiktok.router,
     instagram.router,
+    inline.router,
 )
 
 __all__ = [

@@ -12,7 +12,7 @@ from aiogram.types import (
 )
 from aiogram.types.input_file import FSInputFile
 from moviepy import VideoFileClip
-
+from main import bot
 
 
 load_dotenv()
@@ -84,6 +84,7 @@ def convert_video_to_mp3(video_path: str) -> tuple[str | None, str | None]:
 @router.message(F.text.regexp(r"(https?://)?(www\.)?(instagram\.com/reel/)([a-zA-Z0-9_-]+)"))
 async def handle_instagram_reel(message: Message):
     url = message.text.strip()
+    bot_username = (await bot.get_me()).username
     await message.answer("⏳ Завантажую Instagram...")
 
     loop = asyncio.get_running_loop()
@@ -103,7 +104,7 @@ async def handle_instagram_reel(message: Message):
     video_file = FSInputFile(video_path)
     await message.answer_video(
         video_file,
-        caption="🔗 Завантажуй відео тут 👉 @MeryLoadBot",
+        caption=f"🔗 Завантажуй аудіо тут 👉 @{bot_username}",
         reply_markup=keyboard
     )
 
@@ -115,6 +116,7 @@ async def handle_instagram_reel(message: Message):
 @router.callback_query(F.data.startswith("convert_mp3|"))
 async def convert_to_mp3_instagram(callback: CallbackQuery):
     parts = callback.data.split("|")
+    bot_username = (await bot.get_me()).username
     unique_id = parts[1]
     url = callback_store.get(unique_id)
 
@@ -141,7 +143,7 @@ async def convert_to_mp3_instagram(callback: CallbackQuery):
     try:
         await callback.message.answer_audio(
             audio_file,
-            caption="🔗 Завантажуй аудіо тут 👉 @MeryLoadBot"
+            caption=f"🔗 Завантажуй аудіо тут 👉 @{bot_username}",
         )
     except Exception as e:
         await callback.message.answer(f"❌ Помилка надсилання: {e}")

@@ -1,15 +1,16 @@
 import os
 import uuid
+import requests
+import time
+import logging
+
 from aiogram import Bot, Router, F
 from aiogram.types import Message, InlineKeyboardButton, InlineKeyboardMarkup, CallbackQuery
 from dotenv import load_dotenv
-import logging
 from yt_dlp import YoutubeDL
 from yt_dlp.utils import DownloadError
-import requests
-import time
-import asyncio
 from aiogram.types.input_file import FSInputFile
+from main import bot
 
 
 from main import BOT_TOKEN, admin_id
@@ -23,6 +24,7 @@ callback_store = {}
 
 @router.callback_query(F.data.startswith("convert_mp3_youtube"))
 async def convert_to_mp3_youtube(callback: CallbackQuery):
+    bot_username = (await bot.get_me()).username
     parts = callback.data.split("|")
     unique_id = parts[1]
     url = callback_store.get(unique_id)
@@ -42,7 +44,7 @@ async def convert_to_mp3_youtube(callback: CallbackQuery):
         with open(filename, "rb") as audio:
             await callback.message.answer_audio(
                 audio,
-                caption="🔗 Завантажуй аудіо тут 👉 @MeryLoadBot"
+                caption=f"🔗 Завантажуй аудіо тут 👉 @{bot_username}",
             )
     except Exception as e:
         await callback.message.answer(f"❌ Помилка: {e}")
@@ -53,6 +55,7 @@ async def convert_to_mp3_youtube(callback: CallbackQuery):
 
 @router.message(F.text.regexp(r"(https?://)?(www\.)?(youtube\.com/watch\?v=|youtu\.be/)([\w-]+)"))
 async def handle_youtube_url(message: Message):
+    bot_username = (await bot.get_me()).username
     url = message.text.strip()
     unique_id = str(uuid.uuid4())
     callback_store[unique_id] = url
@@ -75,7 +78,7 @@ async def handle_youtube_url(message: Message):
         video_file = FSInputFile(video_path)
         await message.answer_video(
             video_file,
-            caption="🔗 Завантажуй відео тут 👉 @MeryLoadBot",
+            caption=f"🔗 Завантажуй аудіо тут 👉 @{bot_username}",
             reply_markup=keyboard
         )
     except Exception as e:

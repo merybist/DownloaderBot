@@ -101,6 +101,7 @@ async def download_tiktok(url, type="tiktok"):
 @router.message(F.text.regexp(r"(https?://)?(www\.)?(tiktok\.com/.+|vm\.tiktok\.com/.+|vt\.tiktok\.com/.+)"))
 async def handle_tiktok(message: Message):
     url = message.text.strip()
+    bot_username = (await bot.get_me()).username
     await message.answer("⏳ Завантажую TikTok...")
 
     result, content_type, error = await download_tiktok(url)
@@ -136,7 +137,7 @@ async def handle_tiktok(message: Message):
             video_file = FSInputFile(result)
             await message.answer_video(
                 video_file,
-                caption="🔗 Завантажуй відео тут 👉 @MeryLoadBot",
+                caption=f"🔗 Завантажуй аудіо тут 👉 @{bot_username}",
                 reply_markup=keyboard
             )
 

@@ -1,0 +1,8 @@
+python-dotenv
+yt-dlp
+aiogram
+requests
+moviepy
+instaloader
+psycopg2-binary
+httpx

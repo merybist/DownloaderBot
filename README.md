@@ -21,7 +21,6 @@ cd DownloaderBot
 ### 2. Configure the bot
 
 Create a `.env` file in the root directory of the project and add your Telegram Bot API token:
-
 ```plaintext
 
 ### 3. (Optional) Run your own local Telegram Bot API server
@@ -43,6 +42,28 @@ If you want to use your own local Telegram Bot API server, follow the official g
     python main.py
     ```
 ```
+
+.env Example
+````
+BOT_TOKEN=
+ADMIN_ID=
+CHANNEL_ID=
+
+RAPIDAPI_KEY=
+RAPIDAPI_HOST=
+
+# Database configuration (PostgreSQL/Subabase)
+
+host=
+database=
+user=
+password=
+port=
+
+````
+
+
+
 Or using Docker:
 
 ```

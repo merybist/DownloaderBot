@@ -16,7 +16,7 @@ async def start_handler(message: Message):
     existing_user = cur_bot.fetchone()
 
     if existing_user:
-        await message.answer(f'Привіт, {full_name}! Раді знову тебе бачити! 😎')
+        await message.answer(f'Hi, {full_name}! Welcome! 😎')
     else:
         cur_bot.execute(
             "INSERT INTO users (user_id, first_name, last_name, chat_id) VALUES (?, ?, ?, ?)",
@@ -24,6 +24,6 @@ async def start_handler(message: Message):
         )
         conn_bot.commit()
         await message.answer(
-            f'Привіт, {full_name}! Я бот, який вміє завантажувати відео з TikTok, Instagram та YouTube.\n\n'
-            f'Надішли посилання на відео, яке хочеш завантажити😊'
+            f'I am a bot that can download videos from TikTok, Instagram, and YouTube.\n\n'
+            f'Send a link to the video you want to download😊'
         )

@@ -102,7 +102,7 @@ async def download_tiktok(url, type="tiktok"):
 async def handle_tiktok(message: Message):
     url = message.text.strip()
     bot_username = (await bot.get_me()).username
-    await message.answer("⏳ Завантажую TikTok...")
+    await message.answer("⏳ Download TikTok...")
 
     result, content_type, error = await download_tiktok(url)
 
@@ -116,7 +116,7 @@ async def handle_tiktok(message: Message):
                 InputMediaPhoto(media=FSInputFile(path)) for path in result
             ]
             await message.answer_media_group(media_group)
-            await message.answer("📸 Завантажуй фото тут 👉 @MeryLoadBot")
+            await message.answer("📸 Download photos here 👉 @MeryLoadBot")
 
             for path in result:
                 if os.path.exists(path):
@@ -129,7 +129,7 @@ async def handle_tiktok(message: Message):
 
             keyboard = InlineKeyboardMarkup(inline_keyboard=[[
                 InlineKeyboardButton(
-                    text="🎵 Завантажити у MP3",
+                    text="🎵 Download in MP3",
                     callback_data=f"convert_mp3_tiktok|{unique_id}"
                 )
             ]])
@@ -137,7 +137,7 @@ async def handle_tiktok(message: Message):
             video_file = FSInputFile(result)
             await message.answer_video(
                 video_file,
-                caption=f"🔗 Завантажуй аудіо тут 👉 @{bot_username}",
+                caption=f"🔗 Download video here 👉 @{bot_username}",
                 reply_markup=keyboard
             )
 
@@ -145,7 +145,7 @@ async def handle_tiktok(message: Message):
                 os.remove(result)
 
     except Exception as e:
-        await message.answer(f"❌ Помилка: {e}")
+        await message.answer(f"❌ Error: {e}")
 
 
 @router.callback_query(F.data.startswith("convert_mp3_tiktok"))
@@ -156,10 +156,10 @@ async def convert_to_mp3(callback: CallbackQuery):
     url = callback_store.get(unique_id)
 
     if not url:
-        await callback.message.answer("❌ Помилка: посилання не знайдено")
+        await callback.message.answer("❌ Error: url is not found")
         return
 
-    await callback.message.answer("⏳ Конвертую у MP3...")
+    await callback.message.answer("⏳ Convert in MP3...")
 
     filename, title, error = await get_audio_stream(url)
     if error:
@@ -170,10 +170,10 @@ async def convert_to_mp3(callback: CallbackQuery):
         audio_file = FSInputFile(filename)
         await callback.message.answer_audio(
             audio_file,
-            caption=f"🔗 Завантажуй аудіо тут 👉 @{bot_username}",
+            caption=f"🔗 Download audio here 👉 @{bot_username}",
         )
     except Exception as e:
-        await callback.message.answer(f"❌ Помилка: {e}")
+        await callback.message.answer(f"❌ Error: {e}")
     finally:
         if os.path.exists(filename):
             os.remove(filename)

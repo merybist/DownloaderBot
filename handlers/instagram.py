@@ -85,26 +85,26 @@ def convert_video_to_mp3(video_path: str) -> tuple[str | None, str | None]:
 async def handle_instagram_reel(message: Message):
     url = message.text.strip()
     bot_username = (await bot.get_me()).username
-    await message.answer("⏳ Завантажую Instagram...")
+    await message.answer("⏳ Download Instagram...")
 
     loop = asyncio.get_running_loop()
     try:
         video_path = await loop.run_in_executor(None, lambda: asyncio.run(download_reel(url)))
     except Exception as e:
-        await message.answer(f"❌ Помилка при завантаженні: {e}")
+        await message.answer(f"❌ Error: {e}")
         return
 
     unique_id = str(uuid.uuid4())
     callback_store[unique_id] = url
 
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🎵 Завантажити у MP3", callback_data=f"convert_mp3|{unique_id}")]
+        [InlineKeyboardButton(text="🎵 Download in MP3", callback_data=f"convert_mp3|{unique_id}")]
     ])
 
     video_file = FSInputFile(video_path)
     await message.answer_video(
         video_file,
-        caption=f"🔗 Завантажуй аудіо тут 👉 @{bot_username}",
+        caption=f"🔗 Download audio here 👉 @{bot_username}",
         reply_markup=keyboard
     )
 
@@ -121,29 +121,29 @@ async def convert_to_mp3_instagram(callback: CallbackQuery):
     url = callback_store.get(unique_id)
 
     if not url:
-        await callback.message.answer("❌ Посилання більше не активне.")
+        await callback.message.answer("❌ Error is not active.")
         return
 
-    await callback.message.answer("⏳ Конвертую у MP3...")
+    await callback.message.answer("⏳ Convert in MP3...")
 
     loop = asyncio.get_running_loop()
     try:
         video_path = await loop.run_in_executor(None, lambda: asyncio.run(download_reel(url)))
     except Exception as e:
-        await callback.message.answer(f"❌ Помилка завантаження відео: {e}")
+        await callback.message.answer(f"❌ Error: {e}")
         return
 
     mp3_path, error = await loop.run_in_executor(None, convert_video_to_mp3, video_path)
 
     if error:
-        await callback.message.answer(f"❌ Помилка при конвертації: {error}")
+        await callback.message.answer(f"❌ Error: {error}")
         return
 
     audio_file = FSInputFile(mp3_path)
     try:
         await callback.message.answer_audio(
             audio_file,
-            caption=f"🔗 Завантажуй аудіо тут 👉 @{bot_username}",
+            caption=f"🔗 Download audio here 👉 @{bot_username}",
         )
     except Exception as e:
         await callback.message.answer(f"❌ Помилка надсилання: {e}")

@@ -37,10 +37,10 @@ async def convert_to_mp3_youtube(callback: CallbackQuery):
     url = callback_store.get(unique_id)
 
     if not url:
-        await callback.answer("Помилка: посилання не знайдено")
+        await callback.answer("Error: url is not found")
         return
 
-    await callback.message.answer("⏳ Конвертую у MP3...")
+    await callback.message.answer("⏳ Convert to MP3...")
     filename, title, error = download_mp3(url)
 
     if error:
@@ -51,10 +51,10 @@ async def convert_to_mp3_youtube(callback: CallbackQuery):
         audio_file = FSInputFile(filename)
         await callback.message.answer_audio(
             audio_file,
-            caption=f"🔗 Завантажуй аудіо тут 👉 @{bot_username}",
+            caption=f"🔗 Download audio here 👉 @{bot_username}",
         )
     except Exception as e:
-        await callback.message.answer(f"❌ Помилка: {e}")
+        await callback.message.answer(f"❌ Error: {e}")
     finally:
         if os.path.exists(filename):
             os.remove(filename)
@@ -67,7 +67,7 @@ async def handle_youtube_url(message: Message):
     unique_id = str(uuid.uuid4())
     callback_store[unique_id] = url
 
-    await message.answer("⏳ Завантажую YouTube...")
+    await message.answer("⏳ Download YouTube...")
     video_path, error = download_video_youtube(url)
 
     if error:
@@ -77,7 +77,7 @@ async def handle_youtube_url(message: Message):
     try:
         keyboard = InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(
-                text="🎵 Завантажити у MP3",
+                text="🎵 Download in MP3",
                 callback_data=f"convert_mp3_youtube|{unique_id}"
             )]
         ])
@@ -85,11 +85,11 @@ async def handle_youtube_url(message: Message):
         video_file = FSInputFile(video_path)
         await message.answer_video(
             video_file,
-            caption=f"🔗 Завантажуй аудіо тут 👉 @{bot_username}",
+            caption=f"🔗 Download audio here 👉 @{bot_username}",
             reply_markup=keyboard
         )
     except Exception as e:
-        error_message = f"❌ Помилка: {e}"
+        error_message = f"❌ Error: {e}"
         await message.answer(error_message)
 
         if "No such file or directory" in str(e):

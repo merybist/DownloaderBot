@@ -3,13 +3,18 @@ import uuid
 import requests
 import time
 import logging
+import uuid
+import random
+import string
+import re
 
 from aiogram import Bot, Router, F
 from aiogram.types import Message, InlineKeyboardButton, InlineKeyboardMarkup, CallbackQuery
 from dotenv import load_dotenv
-from yt_dlp import YoutubeDL
-from yt_dlp.utils import DownloadError
+from pytubefix import YouTube
 from aiogram.types.input_file import FSInputFile
+from moviepy import AudioFileClip
+
 from main import bot
 
 
@@ -17,6 +22,8 @@ from main import BOT_TOKEN, admin_id
 load_dotenv()
 
 router = Router()
+
+DOWNLOADS_FOLDER = "services/downloads"
 
 # Тимчасове сховище даних (краще використовувати FSM або базу даних)
 callback_store = {}
@@ -34,18 +41,18 @@ async def convert_to_mp3_youtube(callback: CallbackQuery):
         return
 
     await callback.message.answer("⏳ Конвертую у MP3...")
-    filename, title, error = get_audio_stream(url)
+    filename, title, error = download_mp3(url)
 
     if error:
         await callback.message.answer(error)
         return
 
     try:
-        with open(filename, "rb") as audio:
-            await callback.message.answer_audio(
-                audio,
-                caption=f"🔗 Завантажуй аудіо тут 👉 @{bot_username}",
-            )
+        audio_file = FSInputFile(filename)
+        await callback.message.answer_audio(
+            audio_file,
+            caption=f"🔗 Завантажуй аудіо тут 👉 @{bot_username}",
+        )
     except Exception as e:
         await callback.message.answer(f"❌ Помилка: {e}")
     finally:
@@ -61,7 +68,7 @@ async def handle_youtube_url(message: Message):
     callback_store[unique_id] = url
 
     await message.answer("⏳ Завантажую YouTube...")
-    video_path, error = get_youtube_video(url)
+    video_path, error = download_video_youtube(url)
 
     if error:
         await message.answer(error)
@@ -113,55 +120,75 @@ def custom_oauth_verifier(verification_url, user_code):
         logging.info(f"{i} seconds remaining for verification")
         time.sleep(5)
 
-def get_youtube_video(url: str):
+def sanitize_filename(filename):
+    """
+    Видаляє недопустимі символи з назви файлу.
+    """
+    return re.sub(r'[<>:"/\\|?*]', '_', filename)
+
+
+def ensure_downloads_folder_exists(downloads_folder):
+    if not os.path.exists(downloads_folder):
+        os.makedirs(downloads_folder)
+
+def generate_random_string(length=8):
+    return ''.join(random.choices(string.ascii_lowercase + string.digits, k=length))
+
+
+def get_video_stream(yt):
+    # Першочергово пробуємо отримати 1080p із прогресивним потоком (відео+аудіо)
+    return yt.streams.filter(res="1080p", file_extension='mp4', progressive=True).first() or \
+        yt.streams.filter(progressive=True, file_extension='mp4').order_by('resolution').desc().first()
+
+
+def download_video_youtube(url, custom_label="youtube_video"):
     try:
-        filename = f"{uuid.uuid4()}.mp4"
-        ydl_opts = {
-            'quiet': True,
-            'outtmpl': filename,
-            'format': 'best[ext=mp4]',
-            'no_warnings': True,
-            'noplaylist': True,
-        }
-        with YoutubeDL(ydl_opts) as ydl:
-            ydl.download([url])
-        return filename, None
+        ensure_downloads_folder_exists(DOWNLOADS_FOLDER)
+
+        yt = YouTube(url)
+        video_stream = get_video_stream(yt)
+        RES = '1080p'
+
+        for idx, i in enumerate(yt.streams):
+            if i.resolution == RES:
+                print(idx)
+                print(i.resolution)
+                break
+        print(yt.streams[idx])
+
+        filename_prefix = f"{generate_random_string()}_{custom_label}"
+        filename = sanitize_filename(filename_prefix) + ".mp4"
+        output_path = os.path.join(DOWNLOADS_FOLDER, filename)
+
+        video_stream.download(output_path=DOWNLOADS_FOLDER, filename=filename)
+        return output_path, None
+
     except Exception as e:
-        logging.error(f"Error downloading YouTube video: {e}")
-        return None, f"❌ Помилка при завантаженні: {e}"
+        return None, f"❌ Помилка завантаження відео: {e}"
 
 
-
-def get_video_stream(yt: dict) -> dict | None:
-    formats = yt.get("formats", [])
-    vs = [f for f in formats
-          if f.get("vcodec") != "none"
-          and f.get("acodec") != "none"
-          and f.get("ext") == "mp4"]
-    vs.sort(key=lambda x: int(x.get("height", 0)), reverse=True)
-    best = vs[0] if vs else None
-    if best:
-        best["webpage_url"] = yt["webpage_url"]
-    return best
-
-
-def get_audio_stream(url: str):
+def download_mp3(url):
     try:
-        filename = f"{uuid.uuid4()}.mp3"
-        ydl_opts = {
-            'quiet': True,
-            'format': 'bestaudio[ext=m4a]/bestaudio',
-            'outtmpl': filename,
-            'postprocessors': [{
-                'key': 'FFmpegExtractAudio',
-                'preferredcodec': 'mp3',
-                'preferredquality': '192',
-            }],
-        }
-        with YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url)
-            title = info.get("title", "audio")
-        return filename, title, None
+        ensure_downloads_folder_exists(DOWNLOADS_FOLDER)
+
+        yt = YouTube(url)
+        audio_stream = yt.streams.filter(only_audio=True).order_by('abr').desc().first()
+
+        if not audio_stream:
+            return None, None, "❌ Не знайдено аудіо для завантаження."
+
+        title = sanitize_filename(yt.title)
+        temp_video_path = os.path.join(DOWNLOADS_FOLDER, f"{generate_random_string()}_temp.mp4")
+        final_mp3_path = os.path.join(DOWNLOADS_FOLDER, f"{title}.mp3")
+
+        audio_stream.download(output_path=DOWNLOADS_FOLDER, filename=os.path.basename(temp_video_path))
+
+        audioclip = AudioFileClip(temp_video_path)
+        audioclip.write_audiofile(final_mp3_path, bitrate="192k")
+        audioclip.close()
+        os.remove(temp_video_path)
+
+        return final_mp3_path, yt.title, None
+
     except Exception as e:
-        logging.error(f"Error downloading MP3: {e}")
-        return None, None, f"❌ Помилка при конвертації: {e}"
+        return None, None, f"❌ Помилка завантаження аудіо: {e}"

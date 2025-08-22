@@ -6,3 +6,4 @@ moviepy
 instaloader
 psycopg2-binary
 httpx
+yt-dlp

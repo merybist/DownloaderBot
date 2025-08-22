@@ -43,6 +43,12 @@ If you want to use your own local Telegram Bot API server, follow the official g
     ```
 ```
 
+Or using Docker:
+
+```
+docker compose up -d
+```
+
 .env Example
 ````
 BOT_TOKEN=
@@ -61,28 +67,6 @@ password=
 port=
 
 ````
-
-
-
-Or using Docker:
-
-```
-docker compose up -d
-```
-
-To use your local image, update docker-compose.yml to:
-
-```
-services:
-  merybot:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    volumes:
-      - .:/app
-    container_name: merybot
-    restart: always
-```
 
 ## Usage
 

@@ -3,7 +3,7 @@ import uuid
 from aiogram import Router, Bot
 from aiogram.types import InlineQuery, InlineQueryResultCachedVideo
 from aiogram.types.input_file import FSInputFile
-from handlers.youtube import download_video_youtube
+from handlers.youtube import download_media
 from handlers.tiktok import download_tiktok
 from handlers.instagram import download_reel
 from main import bot
@@ -20,7 +20,7 @@ async def handle_inline_query(inline_query: InlineQuery, bot: Bot):
     # Визначення типу
     try:
         if "youtube.com" in url or "youtu.be" in url:
-            file_path, error = download_video_youtube(url)
+            file_path, error = download_media(url)
             if error:
                 raise Exception(error)
 

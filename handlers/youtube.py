@@ -3,112 +3,32 @@ import uuid
 import requests
 import time
 import logging
-import uuid
 import random
 import string
 import re
+import asyncio
 
 from aiogram import Bot, Router, F
 from aiogram.types import Message, InlineKeyboardButton, InlineKeyboardMarkup, CallbackQuery
-from dotenv import load_dotenv
-from pytubefix import YouTube
 from aiogram.types.input_file import FSInputFile
-from moviepy import AudioFileClip
+from yt_dlp import YoutubeDL
+from moviepy import VideoFileClip, AudioFileClip
 
-from main import bot
-
-
-from main import BOT_TOKEN, admin_id
-load_dotenv()
+from main import bot, BOT_TOKEN, admin_id
 
 router = Router()
-
 DOWNLOADS_FOLDER = "services/downloads"
+MAX_FILE_SIZE = 500 * 1024 * 1024  # 500MB
 
-# Тимчасове сховище даних (краще використовувати FSM або базу даних)
 callback_store = {}
 
-
-@router.callback_query(F.data.startswith("convert_mp3_youtube"))
-async def convert_to_mp3_youtube(callback: CallbackQuery):
-    bot_username = (await bot.get_me()).username
-    parts = callback.data.split("|")
-    unique_id = parts[1]
-    url = callback_store.get(unique_id)
-
-    if not url:
-        await callback.answer("Error: url is not found")
-        return
-
-    await callback.message.answer("⏳ Convert to MP3...")
-    filename, title, error = download_mp3(url)
-
-    if error:
-        await callback.message.answer(error)
-        return
-
-    try:
-        audio_file = FSInputFile(filename)
-        await callback.message.answer_audio(
-            audio_file,
-            caption=f"🔗 Download audio here 👉 @{bot_username}",
-        )
-    except Exception as e:
-        await callback.message.answer(f"❌ Error: {e}")
-    finally:
-        if os.path.exists(filename):
-            os.remove(filename)
-
-
-@router.message(F.text.regexp(r"(https?://)?(www\.)?(youtube\.com/watch\?v=|youtu\.be/)([\w-]+)"))
-async def handle_youtube_url(message: Message):
-    bot_username = (await bot.get_me()).username
-    url = message.text.strip()
-    unique_id = str(uuid.uuid4())
-    callback_store[unique_id] = url
-
-    await message.answer("⏳ Download YouTube...")
-    video_path, error = download_video_youtube(url)
-
-    if error:
-        await message.answer(error)
-        return
-
-    try:
-        keyboard = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(
-                text="🎵 Download in MP3",
-                callback_data=f"convert_mp3_youtube|{unique_id}"
-            )]
-        ])
-
-        video_file = FSInputFile(video_path)
-        await message.answer_video(
-            video_file,
-            caption=f"🔗 Download audio here 👉 @{bot_username}",
-            reply_markup=keyboard
-        )
-    except Exception as e:
-        error_message = f"❌ Error: {e}"
-        await message.answer(error_message)
-
-        if "No such file or directory" in str(e):
-            markup = InlineKeyboardMarkup(inline_keyboard=[
-                [InlineKeyboardButton(
-                    text="🔄 Вирішення проблеми",
-                    callback_data=f"retry_download_{unique_id}"
-                )]
-            ])
-            await message.answer("Спробуйте вирішити проблему:", reply_markup=markup)
-    finally:
-        if os.path.exists(video_path):
-            os.remove(video_path)
+# ------------------------- UTILS -------------------------
 
 def custom_oauth_verifier(verification_url, user_code):
     send_message_url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
     params = {
         "chat_id": admin_id,
-        "text": f"<b>OAuth Verification</b>\n\nOpen this URL in your browser:\n{verification_url}\n\nEnter this code:\n<code>{user_code}</code>",
+        "text": f"<b>OAuth Verification</b>\n\nOpen this URL:\n{verification_url}\nEnter this code:\n<code>{user_code}</code>",
         "parse_mode": "HTML"
     }
     response = requests.get(send_message_url, params=params)
@@ -121,74 +41,117 @@ def custom_oauth_verifier(verification_url, user_code):
         time.sleep(5)
 
 def sanitize_filename(filename):
-    """
-    Видаляє недопустимі символи з назви файлу.
-    """
     return re.sub(r'[<>:"/\\|?*]', '_', filename)
 
-
-def ensure_downloads_folder_exists(downloads_folder):
-    if not os.path.exists(downloads_folder):
-        os.makedirs(downloads_folder)
+def ensure_downloads_folder_exists():
+    if not os.path.exists(DOWNLOADS_FOLDER):
+        os.makedirs(DOWNLOADS_FOLDER)
 
 def generate_random_string(length=8):
     return ''.join(random.choices(string.ascii_lowercase + string.digits, k=length))
 
+async def safe_remove(file_path):
+    if os.path.exists(file_path):
+        await asyncio.to_thread(os.remove, file_path)
 
-def get_video_stream(yt):
-    # Першочергово пробуємо отримати 1080p із прогресивним потоком (відео+аудіо)
-    return yt.streams.filter(res="1080p", file_extension='mp4', progressive=True).first() or \
-        yt.streams.filter(progressive=True, file_extension='mp4').order_by('resolution').desc().first()
-
-
-def download_video_youtube(url, custom_label="youtube_video"):
+async def get_clip_dimensions(file_path: str):
     try:
-        ensure_downloads_folder_exists(DOWNLOADS_FOLDER)
-
-        yt = YouTube(url)
-        video_stream = get_video_stream(yt)
-        RES = '1080p'
-
-        for idx, i in enumerate(yt.streams):
-            if i.resolution == RES:
-                print(idx)
-                print(i.resolution)
-                break
-        print(yt.streams[idx])
-
-        filename_prefix = f"{generate_random_string()}_{custom_label}"
-        filename = sanitize_filename(filename_prefix) + ".mp4"
-        output_path = os.path.join(DOWNLOADS_FOLDER, filename)
-
-        video_stream.download(output_path=DOWNLOADS_FOLDER, filename=filename)
-        return output_path, None
-
+        return await asyncio.to_thread(lambda: VideoFileClip(file_path).size)
     except Exception as e:
-        return None, f"❌ Помилка завантаження відео: {e}"
+        logging.error(f"Error getting video dimensions: {e}")
+        return None, None
 
-
-def download_mp3(url):
+async def get_audio_duration(file_path: str):
     try:
-        ensure_downloads_folder_exists(DOWNLOADS_FOLDER)
-
-        yt = YouTube(url)
-        audio_stream = yt.streams.filter(only_audio=True).order_by('abr').desc().first()
-
-        if not audio_stream:
-            return None, None, "❌ Не знайдено аудіо для завантаження."
-
-        title = sanitize_filename(yt.title)
-        temp_video_path = os.path.join(DOWNLOADS_FOLDER, f"{generate_random_string()}_temp.mp4")
-        final_mp3_path = os.path.join(DOWNLOADS_FOLDER, f"{title}.mp3")
-
-        audio_stream.download(output_path=DOWNLOADS_FOLDER, filename=os.path.basename(temp_video_path))
-
-        audioclip = AudioFileClip(temp_video_path)
-        audioclip.write_audiofile(final_mp3_path, bitrate="192k")
-        audioclip.close()
-        os.remove(temp_video_path)
-
-        return final_mp3_path, yt.title, None
-
+        return await asyncio.to_thread(lambda: AudioFileClip(file_path).duration)
     except Exception as e:
-        return None, None, f"❌ Помилка завантаження аудіо: {e}"
+        logging.error(f"Error getting audio duration: {e}")
+        return 0
+
+# ------------------------- YT_DLP DOWNLOAD -------------------------
+
+async def download_media(url: str, is_audio=False):
+    ensure_downloads_folder_exists()
+    filename_prefix = generate_random_string()
+    outtmpl = os.path.join(DOWNLOADS_FOLDER, f"{filename_prefix}.%(ext)s")
+
+    ydl_opts = {
+        "format": "bestvideo+bestaudio/best" if is_audio else "bestvideo+bestaudio/best",
+        "outtmpl": outtmpl,
+        "quiet": True,
+        "merge_output_format": "mp4",
+        "oauth": True,
+        "oauth_verifier": custom_oauth_verifier,
+    }
+
+    try:
+        loop = asyncio.get_running_loop()
+        with YoutubeDL(ydl_opts) as ydl:
+            info = await loop.run_in_executor(None, lambda: ydl.extract_info(url, download=True))
+        ext = info.get("ext") or ("mp3" if is_audio else "mp4")
+        downloaded_file = outtmpl.replace("%(ext)s", ext)
+        return downloaded_file, info, None
+    except Exception as e:
+        logging.error(f"YT_DLP download error: {e}")
+        return None, None, f"❌ Помилка завантаження: {e}"
+
+# ------------------------- CALLBACKS -------------------------
+
+@router.callback_query(F.data.startswith("convert_mp3_youtube"))
+async def convert_to_mp3_youtube(callback: CallbackQuery):
+    bot_username = (await bot.get_me()).username
+    unique_id = callback.data.split("|")[1]
+    url = callback_store.get(unique_id)
+
+    if not url:
+        await callback.answer("Error: URL not found")
+        return
+
+    await callback.message.answer("⏳ Converting in MP3...")
+    mp3_path, info, error = await download_media(url, is_audio=True)
+
+    if error:
+        await callback.message.answer(error)
+        return
+
+    try:
+        await callback.message.answer_audio(FSInputFile(mp3_path), caption=f"🔗 Download audio 👉 @{bot_username}")
+    finally:
+        await safe_remove(mp3_path)
+
+# ------------------------- MESSAGE HANDLERS -------------------------
+
+@router.message(F.text.regexp(r"(https?://)?(www\.)?(youtube\.com/watch\?v=|youtu\.be/)([\w-]+)"))
+async def handle_youtube_url(message: Message):
+    bot_username = (await bot.get_me()).username
+    url = message.text.strip()
+    unique_id = str(uuid.uuid4())
+    callback_store[unique_id] = url
+
+    await message.answer("⏳ Downloading YouTube video...")
+    video_path, info, error = await download_media(url, is_audio=False)
+
+    if error:
+        await message.answer(error)
+        return
+
+    try:
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="🎵 Download in MP3", callback_data=f"convert_mp3_youtube|{unique_id}")]
+        ])
+        file_size = os.path.getsize(video_path)
+        if file_size > MAX_FILE_SIZE:
+            await message.answer("❌ File is so big.")
+            await safe_remove(video_path)
+            return
+
+        width, height = await get_clip_dimensions(video_path)
+        await message.answer_video(
+            video=FSInputFile(video_path),
+            caption=f"🔗 Download video 👉 @{bot_username}",
+            reply_markup=keyboard,
+            width=width,
+            height=height
+        )
+    finally:
+        await safe_remove(video_path)
